@@ -1,0 +1,130 @@
+name: python-ci
+
+on:
+  pull_request:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint_ruff:
+    name: Ruff
+    runs-on: macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: ls -lrsah
+
+      - name: Run Ruff (lint)
+        # This action installs and/or runs Ruff in GitHub Actions.
+        uses: astral-sh/ruff-action@v3
+
+  test_coverage:
+    name: Unit tests + coverage
+    runs-on: macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install deps
+        run: |
+          pip install coverage
+
+      - name: Run unittest with coverage
+        run: |
+          python -m coverage run -m unittest discover -s tests
+          python -m coverage xml -o coverage.xml
+          python -m coverage report
+
+      - name: Upload coverage.xml
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  bandit:
+    name: Bandit security scan
+    runs-on: macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install Bandit
+        run: |
+          pip install bandit
+
+      - name: Run Bandit
+        run: |
+          bandit -r src -x tests
+
+  sonarqube:
+    name: SonarQube scan
+    runs-on: macOS
+    needs: [ lint_ruff, test_coverage, bandit ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download coverage.xml
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-xml
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.sources=src
+            -Dsonar.tests=tests
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+
+      # Optional: fail pipeline if Quality Gate is red (typically for deploy jobs)
+      - name: SonarQube Quality Gate
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  build_and_publish:
+    name: Build + publish to Nexus PyPI
+    runs-on: ubuntu-latest
+    needs: [ sonarqube ]
+    # Only publish from main; adjust to tags/releases if you prefer.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Build package (sdist + wheel)
+        run: |
+          pip install build
+          python -m build
+
+      - name: Upload to Nexus with Twine
+        env:
+          TWINE_REPOSITORY_URL: ${{ secrets.NEXUS_PYPI_URL }}
+          TWINE_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          pip install twine
+          python -m twine upload dist/*

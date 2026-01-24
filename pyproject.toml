@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "depdetect"                 # the pip package name
+version = "0.1.0"
+description = "Detect whether a folder contains vulnerability-scannable project metadata."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Gabor Horvath", email = "gaborka812@gmail.com" }]
+dependencies = []
+
+[project.scripts]
+depdetect = "depdetect.cli:main"   # creates a shell command: depdetect
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
