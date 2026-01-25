@@ -1,0 +1,32 @@
+[run]
+branch = True
+source =
+    src
+    # If you don't use src-layout, replace with your package, e.g.:
+    # my_package
+parallel = True
+
+[report]
+show_missing = True
+skip_empty = True
+# If you set exclude_lines, include "pragma: no cover" to keep the standard pragma working.
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    raise AssertionError
+
+# Exclude tests and common non-product code from measurement/reporting.
+omit =
+    tests/*
+    */tests/*
+    */test_*.py
+    */conftest.py
+    .venv/*
+    venv/*
+    */site-packages/*
+    */__pycache__/*
+    # Add generated or framework files here if needed (e.g., migrations).
+
+[xml]
+output = coverage.xml

@@ -1,22 +1,21 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from src.depdetect.scanner import folder_scanner
+from depdetect.scanner import folder_scanner
 
 
 class TestFolderScanner(unittest.TestCase):
-    @patch("src.depdetect.scanner.folder_scanner.Path")
+    @patch("depdetect.scanner.folder_scanner.Path")
     def test_scan_invalid_directory(self, mock_path):
         mock_path.return_value.exists.return_value = False
         mock_path.return_value.is_dir.return_value = False
         with self.assertRaises(SystemExit):
             folder_scanner.scan("invalid/path", 1, [], "")
 
-    @patch("src.depdetect.scanner.folder_scanner.os.walk")
-    @patch("src.depdetect.scanner.folder_scanner.Path")
-    @patch("src.depdetect.scanner.folder_scanner.constant")
-    @patch("src.depdetect.scanner.folder_scanner.pretty_print")
+    @patch("depdetect.scanner.folder_scanner.os.walk")
+    @patch("depdetect.scanner.folder_scanner.Path")
+    @patch("depdetect.scanner.folder_scanner.constant")
     def test_scan_detects_markers(
-        self, mock_print, mock_constant, mock_path, mock_walk
+        self, mock_constant, mock_path, mock_walk
     ):
         # Setup constants
         mock_constant.DEFAULT_IGNORE_DIRS = set()
