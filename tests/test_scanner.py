@@ -3,6 +3,12 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from depdetect.scanner import folder_scanner
 from depdetect.scanner.constant import constant
+from depdetect.scanner.errors import (
+    InvalidRootError,
+    LinguistExecutionError,
+    LinguistOutputError,
+    LinguistUnavailableError,
+)
 
 
 SAMPLE_ROOT = Path(__file__).parent / "sample"
@@ -13,8 +19,8 @@ class TestFolderScanner(unittest.TestCase):
     def test_scan_invalid_directory(self, mock_path):
         mock_path.return_value.exists.return_value = False
         mock_path.return_value.is_dir.return_value = False
-        with self.assertRaises(SystemExit):
-            folder_scanner.scan("invalid/path", 1, [], "")
+        with self.assertRaises(InvalidRootError):
+            folder_scanner.scan("invalid/path", 1, [])
 
     @patch("depdetect.scanner.folder_scanner.os.walk")
     @patch("depdetect.scanner.folder_scanner.Path")
@@ -54,7 +60,7 @@ class TestFolderScanner(unittest.TestCase):
 
         mock_path.side_effect = resolve_side_effect
 
-        result = folder_scanner.scan("root", 2, [], "")
+        result = folder_scanner.scan("root", 2, [])
         self.assertEqual(result["classification"], "likely_project")
         self.assertIn("scas", result["hits"])
         self.assertEqual(result["counts"]["script_files"], 1)
@@ -99,12 +105,12 @@ class TestFolderScanner(unittest.TestCase):
             self.assertIn(extension, constant.SCRIPT_EXTENSIONS)
 
     def test_scan_detects_new_dotnet_slnx_fixture(self):
-        result = folder_scanner.scan(str(SAMPLE_ROOT / "dotnet_slnx"), 2, [], "")
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "dotnet_slnx"), 2, [])
         self.assertEqual(result["classification"], "likely_project")
         self.assertEqual(result["hits"]["dotnet"], ["sample.slnx"])
 
     def test_scan_detects_new_nupkg_fixture(self):
-        result = folder_scanner.scan(str(SAMPLE_ROOT / "artifact_nupkg"), 2, [], "")
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "artifact_nupkg"), 2, [])
         self.assertEqual(result["classification"], "likely_project")
         self.assertEqual(result["hits"]["artifacts"], ["sample.nupkg"])
 
@@ -131,7 +137,7 @@ class TestFolderScanner(unittest.TestCase):
 
         for folder_name, file_name in fixture_dirs.items():
             with self.subTest(folder=folder_name):
-                result = folder_scanner.scan(str(SAMPLE_ROOT / folder_name), 2, [], "")
+                result = folder_scanner.scan(str(SAMPLE_ROOT / folder_name), 2, [])
                 self.assertEqual(result["classification"], "likely_scripts_only")
                 self.assertEqual(result["counts"]["files_total"], 1)
                 self.assertEqual(result["counts"]["script_files"], 1)
@@ -140,7 +146,7 @@ class TestFolderScanner(unittest.TestCase):
                 self.assertTrue((SAMPLE_ROOT / folder_name / file_name).exists())
 
     def test_scan_negative_fixture(self):
-        result = folder_scanner.scan(str(SAMPLE_ROOT / "negative"), 2, [], "")
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "negative"), 2, [])
         self.assertEqual(result["classification"], "likely_scripts_only")
         self.assertEqual(result["counts"]["files_total"], 1)
         self.assertEqual(result["counts"]["script_files"], 0)
@@ -148,7 +154,7 @@ class TestFolderScanner(unittest.TestCase):
         self.assertEqual(result["hits"], {})
 
     def test_scan_mixed_language_fixture(self):
-        result = folder_scanner.scan(str(SAMPLE_ROOT / "mixed_language"), 2, [], "")
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "mixed_language"), 2, [])
         self.assertEqual(result["classification"], "likely_project")
         self.assertEqual(result["confidence"], "high")
         self.assertEqual(result["counts"]["files_total"], 4)
@@ -158,6 +164,36 @@ class TestFolderScanner(unittest.TestCase):
         self.assertEqual(result["hits"]["python"], ["pyproject.toml"])
         self.assertEqual(result["hits"]["container"], ["Dockerfile"])
         self.assertEqual(len(result["notes"]), 3)
+
+    @patch("depdetect.scanner.folder_scanner.subprocess.run", side_effect=FileNotFoundError)
+    def test_linguist_missing_executable_raises_library_error(self, _mock_run):
+        with self.assertRaises(LinguistUnavailableError):
+            folder_scanner.linguist(str(SAMPLE_ROOT / "negative"))
+
+    @patch(
+        "depdetect.scanner.folder_scanner.subprocess.run",
+        side_effect=Exception,
+    )
+    def test_linguist_unexpected_exceptions_propagate(self, mock_run):
+        with self.assertRaises(Exception):
+            folder_scanner.linguist(str(SAMPLE_ROOT / "negative"))
+        mock_run.assert_called_once()
+
+    @patch("depdetect.scanner.folder_scanner.subprocess.run")
+    def test_linguist_failed_command_raises_library_error(self, mock_run):
+        from subprocess import CalledProcessError
+
+        mock_run.side_effect = CalledProcessError(
+            returncode=1, cmd=["github-linguist"], stderr="command returned 1"
+        )
+        with self.assertRaises(LinguistExecutionError):
+            folder_scanner.linguist(str(SAMPLE_ROOT / "negative"))
+
+    @patch("depdetect.scanner.folder_scanner.subprocess.run")
+    def test_linguist_invalid_json_raises_library_error(self, mock_run):
+        mock_run.return_value.stdout = "not-json"
+        with self.assertRaises(LinguistOutputError):
+            folder_scanner.linguist(str(SAMPLE_ROOT / "negative"))
 
 
 if __name__ == "__main__":

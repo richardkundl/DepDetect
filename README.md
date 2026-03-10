@@ -104,6 +104,12 @@ Notes:
 - `hits` contains only categories that were matched.
 - `root` is written as an absolute path.
 
+## Exit Codes
+- `0`: success
+- `1`: unexpected internal error
+- `2`: invalid input, such as a non-existent or non-directory scan path
+- `3`: external tool error, such as `github-linguist` being unavailable, failing, or returning invalid JSON
+
 ## Development
 Run tests from a fresh checkout:
 

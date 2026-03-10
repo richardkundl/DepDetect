@@ -1,9 +1,16 @@
 import json
 import unittest
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 from depdetect import cli
+from depdetect.scanner.errors import (
+    InvalidRootError,
+    LinguistExecutionError,
+    LinguistOutputError,
+    LinguistUnavailableError,
+)
 
 
 SAMPLE_ROOT = Path(__file__).parent / "sample"
@@ -11,9 +18,16 @@ TEST_ROOT = Path(__file__).parent
 
 
 class TestCli(unittest.TestCase):
-    def run_main(self, *args: str) -> None:
-        with patch("sys.argv", ["depdetect", *args]):
-            cli.main()
+    def run_main(self, *args: str) -> tuple[int, str, str]:
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            patch("sys.argv", ["depdetect", *args]),
+            patch("sys.stdout", stdout),
+            patch("sys.stderr", stderr),
+        ):
+            exit_code = cli.main()
+        return exit_code, stdout.getvalue(), stderr.getvalue()
 
     def read_json_report(self, path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -67,8 +81,9 @@ class TestCli(unittest.TestCase):
                     str(json_path),
                 ],
             ):
-                cli.main()
+                exit_code = cli.main()
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
             self.assertTrue(json_path.exists())
             report = self.read_json_report(json_path)
             self.assert_json_contract(
@@ -99,8 +114,9 @@ class TestCli(unittest.TestCase):
                     "--linguist",
                 ],
             ):
-                cli.main()
+                exit_code = cli.main()
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
             report = self.read_json_report(json_path)
             self.assertEqual(report["languages"], {"Python": 100.0})
             mock_linguist.assert_called_once_with(str(SAMPLE_ROOT / "negative"))
@@ -110,16 +126,36 @@ class TestCli(unittest.TestCase):
     def test_main_invalid_path_exits(self):
         missing_path = SAMPLE_ROOT / "does_not_exist"
 
-        with self.assertRaises(SystemExit) as exc_info:
-            self.run_main(str(missing_path))
+        with (
+            patch("depdetect.cli.scanner.scan", side_effect=InvalidRootError(f"Not a directory: {missing_path}")),
+            patch("sys.argv", ["depdetect", str(missing_path)]),
+            patch("sys.stdout", StringIO()),
+            patch("sys.stderr", StringIO()) as stderr,
+        ):
+            with self.assertRaises(SystemExit) as exc_info:
+                cli.main()
 
-        self.assertEqual(str(exc_info.exception), f"Not a directory: {missing_path}")
+        self.assertEqual(exc_info.exception.code, cli.EXIT_INVALID_INPUT)
+        self.assertEqual(stderr.getvalue().strip(), f"Not a directory: {missing_path}")
+
+    def test_main_unexpected_error_exits_with_internal_code(self):
+        with (
+            patch("depdetect.cli.scanner.scan", side_effect=RuntimeError("boom")),
+            patch("sys.argv", ["depdetect", str(SAMPLE_ROOT / "negative")]),
+            patch("sys.stdout", StringIO()),
+            patch("sys.stderr", StringIO()) as stderr,
+        ):
+            with self.assertRaises(SystemExit) as exc_info:
+                cli.main()
+
+        self.assertEqual(exc_info.exception.code, cli.EXIT_INTERNAL_ERROR)
+        self.assertEqual(stderr.getvalue().strip(), "Unexpected error: boom")
 
     def test_main_ignore_dir_excludes_nested_marker(self):
         json_path = TEST_ROOT / "_report_ignore_dir.json"
 
         try:
-            self.run_main(
+            exit_code, stdout, stderr = self.run_main(
                 str(SAMPLE_ROOT / "ignore_dir_custom"),
                 "--ignore-dir",
                 "skipme",
@@ -127,6 +163,9 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("No known project/manifest markers found.", stdout)
+            self.assertEqual(stderr, "")
             report = self.read_json_report(json_path)
             self.assert_json_contract(
                 report,
@@ -144,12 +183,15 @@ class TestCli(unittest.TestCase):
         json_path = TEST_ROOT / "_report_without_ignore_dir.json"
 
         try:
-            self.run_main(
+            exit_code, stdout, stderr = self.run_main(
                 str(SAMPLE_ROOT / "ignore_dir_custom"),
                 "--json-out",
                 str(json_path),
             )
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("Detected markers:", stdout)
+            self.assertEqual(stderr, "")
             report = self.read_json_report(json_path)
             self.assert_json_contract(
                 report,
@@ -167,7 +209,7 @@ class TestCli(unittest.TestCase):
         json_path = TEST_ROOT / "_report_max_depth_excluded.json"
 
         try:
-            self.run_main(
+            exit_code, _stdout, stderr = self.run_main(
                 str(SAMPLE_ROOT / "max_depth_only"),
                 "--max-depth",
                 "1",
@@ -175,6 +217,8 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertEqual(stderr, "")
             report = self.read_json_report(json_path)
             self.assert_json_contract(
                 report,
@@ -192,7 +236,7 @@ class TestCli(unittest.TestCase):
         json_path = TEST_ROOT / "_report_max_depth_included.json"
 
         try:
-            self.run_main(
+            exit_code, stdout, stderr = self.run_main(
                 str(SAMPLE_ROOT / "max_depth_only"),
                 "--max-depth",
                 "2",
@@ -200,6 +244,9 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("level1/level2/requirements.txt", stdout)
+            self.assertEqual(stderr, "")
             report = self.read_json_report(json_path)
             self.assert_json_contract(
                 report,
@@ -219,12 +266,15 @@ class TestCli(unittest.TestCase):
         json_path = TEST_ROOT / "_report_mixed_language.json"
 
         try:
-            self.run_main(
+            exit_code, stdout, stderr = self.run_main(
                 str(SAMPLE_ROOT / "mixed_language"),
                 "--json-out",
                 str(json_path),
             )
 
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("Classification: likely_project (confidence: high)", stdout)
+            self.assertEqual(stderr, "")
             report = self.read_json_report(json_path)
             self.assert_json_contract(
                 report,
@@ -247,43 +297,61 @@ class TestCli(unittest.TestCase):
 
     @patch(
         "depdetect.cli.scanner.linguist",
-        side_effect=SystemExit(
+        side_effect=LinguistUnavailableError(
             "The --linguist option requires the `github-linguist` executable in PATH."
         ),
     )
     def test_main_linguist_missing_exits_cleanly(self, mock_linguist):
-        with self.assertRaises(SystemExit) as exc_info:
-            self.run_main(str(SAMPLE_ROOT / "negative"), "--linguist")
+        with (
+            patch("sys.argv", ["depdetect", str(SAMPLE_ROOT / "negative"), "--linguist"]),
+            patch("sys.stdout", StringIO()),
+            patch("sys.stderr", StringIO()) as stderr,
+        ):
+            with self.assertRaises(SystemExit) as exc_info:
+                cli.main()
 
+        self.assertEqual(exc_info.exception.code, cli.EXIT_EXTERNAL_TOOL_ERROR)
         self.assertEqual(
-            str(exc_info.exception),
+            stderr.getvalue().strip(),
             "The --linguist option requires the `github-linguist` executable in PATH.",
         )
         mock_linguist.assert_called_once_with(str(SAMPLE_ROOT / "negative"))
 
     @patch(
         "depdetect.cli.scanner.linguist",
-        side_effect=SystemExit("Language detection failed: command returned 1"),
+        side_effect=LinguistExecutionError("Language detection failed: command returned 1"),
     )
     def test_main_linguist_tool_failure_exits_cleanly(self, mock_linguist):
-        with self.assertRaises(SystemExit) as exc_info:
-            self.run_main(str(SAMPLE_ROOT / "negative"), "--linguist")
+        with (
+            patch("sys.argv", ["depdetect", str(SAMPLE_ROOT / "negative"), "--linguist"]),
+            patch("sys.stdout", StringIO()),
+            patch("sys.stderr", StringIO()) as stderr,
+        ):
+            with self.assertRaises(SystemExit) as exc_info:
+                cli.main()
 
+        self.assertEqual(exc_info.exception.code, cli.EXIT_EXTERNAL_TOOL_ERROR)
         self.assertEqual(
-            str(exc_info.exception), "Language detection failed: command returned 1"
+            stderr.getvalue().strip(), "Language detection failed: command returned 1"
         )
         mock_linguist.assert_called_once_with(str(SAMPLE_ROOT / "negative"))
 
     @patch(
         "depdetect.cli.scanner.linguist",
-        side_effect=SystemExit("Language detection returned invalid JSON output."),
+        side_effect=LinguistOutputError("Language detection returned invalid JSON output."),
     )
     def test_main_linguist_invalid_json_exits_cleanly(self, mock_linguist):
-        with self.assertRaises(SystemExit) as exc_info:
-            self.run_main(str(SAMPLE_ROOT / "negative"), "--linguist")
+        with (
+            patch("sys.argv", ["depdetect", str(SAMPLE_ROOT / "negative"), "--linguist"]),
+            patch("sys.stdout", StringIO()),
+            patch("sys.stderr", StringIO()) as stderr,
+        ):
+            with self.assertRaises(SystemExit) as exc_info:
+                cli.main()
 
+        self.assertEqual(exc_info.exception.code, cli.EXIT_EXTERNAL_TOOL_ERROR)
         self.assertEqual(
-            str(exc_info.exception),
+            stderr.getvalue().strip(),
             "Language detection returned invalid JSON output.",
         )
         mock_linguist.assert_called_once_with(str(SAMPLE_ROOT / "negative"))

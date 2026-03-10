@@ -3,9 +3,14 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
 
 import depdetect.scanner.constant as constant
+from .errors import (
+    InvalidRootError,
+    LinguistExecutionError,
+    LinguistOutputError,
+    LinguistUnavailableError,
+)
 
 
 def should_skip_dir(dirname: str, ignore_dirs: set[str]) -> bool:
@@ -16,10 +21,10 @@ def match_any_glob(rel_posix: str, globs: set[str]) -> bool:
     return any(fnmatch.fnmatch(rel_posix, g) for g in globs)
 
 
-def scan(root: str, max_depth: int, ignore_dirs: list[str], json_out: str) -> dict:
+def scan(root: str, max_depth: int, ignore_dirs: list[str]) -> dict:
     root = Path(root)
     if not root.exists() or not root.is_dir():
-        raise SystemExit(f"Not a directory: {root}")
+        raise InvalidRootError(f"Not a directory: {root}")
 
     ignore_dirs = set(constant.DEFAULT_IGNORE_DIRS) | set(ignore_dirs)
 
@@ -93,30 +98,7 @@ def scan(root: str, max_depth: int, ignore_dirs: list[str], json_out: str) -> di
         ],
     }
 
-    pretty_print(result, json_out)
-
     return result
-
-
-def pretty_print(report: dict[str, Any], json_out: str) -> None:
-    print(f"Root: {report['root']}")
-    print(
-        f"Classification: {report['classification']} (confidence: {report['confidence']})"
-    )
-    print(
-        f"Counts: total={report['counts']['files_total']}, scripts={report['counts']['script_files']}, text={report['counts']['text_files']}"
-    )
-
-    if report["hits"]:
-        print("\nDetected markers:")
-        for kind, paths in report["hits"].items():
-            print(f"- {kind}: {len(paths)} file(s)")
-            for p in paths[:20]:
-                print(f"  - {p}")
-            if len(paths) > 20:
-                print(f"  ... {len(paths) - 20} more")
-    else:
-        print("\nNo known project/manifest markers found.")
 
 
 def linguist(root: str) -> dict[str, Any]:
@@ -130,14 +112,16 @@ def linguist(root: str) -> dict[str, Any]:
             text=True,
         )
     except FileNotFoundError as exc:
-        raise SystemExit(
+        raise LinguistUnavailableError(
             "The --linguist option requires the `github-linguist` executable in PATH."
         ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip() if exc.stderr else "github-linguist failed."
-        raise SystemExit(f"Language detection failed: {stderr}") from exc
+        raise LinguistExecutionError(f"Language detection failed: {stderr}") from exc
 
     try:
         return json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
-        raise SystemExit("Language detection returned invalid JSON output.") from exc
+        raise LinguistOutputError(
+            "Language detection returned invalid JSON output."
+        ) from exc
