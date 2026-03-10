@@ -52,6 +52,39 @@ If `--json-out` is provided, the tool also writes a JSON report with:
 - `notes`: guidance for scanning focus
 - `languages`: detected languages when `--linguist` is used successfully
 
+JSON format:
+
+```json
+{
+  "root": "/absolute/path/to/project",
+  "classification": "likely_project",
+  "confidence": "high",
+  "counts": {
+    "files_total": 4,
+    "script_files": 1,
+    "text_files": 0
+  },
+  "hits": {
+    "container": ["Dockerfile"],
+    "node": ["package.json"],
+    "python": ["pyproject.toml"]
+  },
+  "notes": [
+    "Dependency manifests/lockfiles indicate SCA (dependency vulnerability) scanning is likely applicable.",
+    "Container/IaC markers indicate misconfiguration scanning is likely applicable.",
+    "If no markers are found, prioritize secrets and code-pattern scanning over dependency CVEs."
+  ],
+  "languages": {
+    "Python": 100.0
+  }
+}
+```
+
+Notes:
+- `languages` is present only when `--linguist` is used successfully.
+- `hits` contains only categories that were matched.
+- `root` is written as an absolute path.
+
 ## Development
 Run tests from a fresh checkout:
 
