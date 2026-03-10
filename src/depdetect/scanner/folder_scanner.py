@@ -1,5 +1,7 @@
 import fnmatch
+import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -115,3 +117,27 @@ def pretty_print(report: dict[str, Any], json_out: str) -> None:
                 print(f"  ... {len(paths) - 20} more")
     else:
         print("\nNo known project/manifest markers found.")
+
+
+def linguist(root: str) -> dict[str, Any]:
+    root_path = Path(root).resolve()
+
+    try:
+        completed = subprocess.run(
+            ["github-linguist", "--json", str(root_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            "The --linguist option requires the `github-linguist` executable in PATH."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() if exc.stderr else "github-linguist failed."
+        raise SystemExit(f"Language detection failed: {stderr}") from exc
+
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise SystemExit("Language detection returned invalid JSON output.") from exc

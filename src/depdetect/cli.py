@@ -25,6 +25,11 @@ def parse_args() -> argparse.Namespace:
         help="Directory name to ignore (repeatable).",
     )
     ap.add_argument("--json-out", default="", help="Write full report to JSON file.")
+    ap.add_argument(
+        "--linguist",
+        action="store_true",
+        help="Detect languages using github-linguist if available in PATH.",
+    )
 
     return ap.parse_args()
 

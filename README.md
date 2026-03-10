@@ -35,7 +35,7 @@ Options:
 depdetect /path --max-depth 4 --ignore-dir venv --ignore-dir build --json-out report.json
 ```
 
-Enable language detection (requires `github-linguist` in PATH):
+Enable language detection (requires the `github-linguist` executable in PATH):
 
 ```bash
 depdetect /path --linguist

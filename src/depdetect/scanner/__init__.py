@@ -1,5 +1,6 @@
-from .folder_scanner import scan
+from .folder_scanner import linguist, scan
 
 __all__ = [
+    "linguist",
     "scan",
 ]
