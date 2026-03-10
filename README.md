@@ -53,7 +53,7 @@ The scan prints a summary to stdout and returns a JSON report with:
 Run tests:
 
 ```bash
-python -m pytest
+python -m unittest discover -s tests
 ```
 
 ## License
