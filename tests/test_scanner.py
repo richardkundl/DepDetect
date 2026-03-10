@@ -82,6 +82,18 @@ class TestFolderScanner(unittest.TestCase):
     def test_artifacts_include_nupkg(self):
         self.assertIn("*.nupkg", constant.MARKERS["artifacts"]["globs"])
 
+    def test_node_markers_include_workspace_and_bun_files(self):
+        for marker in {"nx.json", "turbo.json", "bun.lockb"}:
+            self.assertIn(marker, constant.MARKERS["node"]["files"])
+
+    def test_python_markers_include_env_files_and_requirements_glob(self):
+        self.assertIn("constraints.txt", constant.MARKERS["python"]["files"])
+        self.assertIn("environment.yml", constant.MARKERS["python"]["files"])
+        self.assertIn("requirements-*.txt", constant.MARKERS["python"]["globs"])
+
+    def test_dotnet_markers_include_directory_packages_props(self):
+        self.assertIn("Directory.Packages.props", constant.MARKERS["dotnet"]["files"])
+
     def test_script_extensions_include_added_shell_and_language_types(self):
         for extension in {
             ".bat",
@@ -113,6 +125,41 @@ class TestFolderScanner(unittest.TestCase):
         result = folder_scanner.scan(str(SAMPLE_ROOT / "artifact_nupkg"), 2, [])
         self.assertEqual(result["classification"], "likely_project")
         self.assertEqual(result["hits"]["artifacts"], ["sample.nupkg"])
+
+    def test_scan_detects_node_nx_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "node_nx"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["node"], ["nx.json"])
+
+    def test_scan_detects_node_turbo_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "node_turbo"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["node"], ["turbo.json"])
+
+    def test_scan_detects_node_bun_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "node_bun"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["node"], ["bun.lockb"])
+
+    def test_scan_detects_python_constraints_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "python_constraints"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["python"], ["constraints.txt"])
+
+    def test_scan_detects_python_requirements_glob_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "python_requirements_glob"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["python"], ["requirements-dev.txt"])
+
+    def test_scan_detects_python_environment_yml_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "python_environment_yml"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["python"], ["environment.yml"])
+
+    def test_scan_detects_dotnet_directory_packages_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "dotnet_directory_packages"), 2, [])
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["dotnet"], ["Directory.Packages.props"])
 
     def test_scan_counts_each_added_script_extension_fixture(self):
         fixture_dirs = {

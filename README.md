@@ -6,6 +6,7 @@ infrastructure markers, and build artifacts.
 ## Features
 - Scans a directory tree for known manifest files and glob patterns.
 - Classifies results as "likely_project" or "likely_scripts_only" with a confidence score.
+- Detects common language and workspace markers such as `package.json`, `nx.json`, `turbo.json`, `bun.lockb`, `pyproject.toml`, `requirements-*.txt`, `environment.yml`, and `Directory.Packages.props`.
 - Optional language detection via `github-linguist`.
 - JSON report output for automation.
 

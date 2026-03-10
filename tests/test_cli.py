@@ -295,6 +295,84 @@ class TestCli(unittest.TestCase):
         finally:
             json_path.unlink(missing_ok=True)
 
+    def test_main_node_workspace_marker_matches_json_contract(self):
+        json_path = TEST_ROOT / "_report_node_nx.json"
+
+        try:
+            exit_code, stdout, stderr = self.run_main(
+                str(SAMPLE_ROOT / "node_nx"),
+                "--json-out",
+                str(json_path),
+            )
+
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("Detected markers:", stdout)
+            self.assertEqual(stderr, "")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_project",
+                confidence="medium",
+                files_total=1,
+                script_files=0,
+                text_files=0,
+            )
+            self.assertEqual(report["hits"], {"node": ["nx.json"]})
+        finally:
+            json_path.unlink(missing_ok=True)
+
+    def test_main_python_env_marker_matches_json_contract(self):
+        json_path = TEST_ROOT / "_report_python_requirements_glob.json"
+
+        try:
+            exit_code, stdout, stderr = self.run_main(
+                str(SAMPLE_ROOT / "python_requirements_glob"),
+                "--json-out",
+                str(json_path),
+            )
+
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("requirements-dev.txt", stdout)
+            self.assertEqual(stderr, "")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_project",
+                confidence="medium",
+                files_total=1,
+                script_files=0,
+                text_files=1,
+            )
+            self.assertEqual(report["hits"], {"python": ["requirements-dev.txt"]})
+        finally:
+            json_path.unlink(missing_ok=True)
+
+    def test_main_dotnet_central_package_marker_matches_json_contract(self):
+        json_path = TEST_ROOT / "_report_dotnet_directory_packages.json"
+
+        try:
+            exit_code, stdout, stderr = self.run_main(
+                str(SAMPLE_ROOT / "dotnet_directory_packages"),
+                "--json-out",
+                str(json_path),
+            )
+
+            self.assertEqual(exit_code, cli.EXIT_OK)
+            self.assertIn("Directory.Packages.props", stdout)
+            self.assertEqual(stderr, "")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_project",
+                confidence="medium",
+                files_total=1,
+                script_files=0,
+                text_files=0,
+            )
+            self.assertEqual(report["hits"], {"dotnet": ["Directory.Packages.props"]})
+        finally:
+            json_path.unlink(missing_ok=True)
+
     @patch(
         "depdetect.cli.scanner.linguist",
         side_effect=LinguistUnavailableError(
