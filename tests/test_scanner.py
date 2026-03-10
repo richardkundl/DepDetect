@@ -147,6 +147,18 @@ class TestFolderScanner(unittest.TestCase):
         self.assertEqual(result["counts"]["text_files"], 1)
         self.assertEqual(result["hits"], {})
 
+    def test_scan_mixed_language_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "mixed_language"), 2, [], "")
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["confidence"], "high")
+        self.assertEqual(result["counts"]["files_total"], 4)
+        self.assertEqual(result["counts"]["script_files"], 1)
+        self.assertEqual(result["counts"]["text_files"], 0)
+        self.assertEqual(result["hits"]["node"], ["package.json"])
+        self.assertEqual(result["hits"]["python"], ["pyproject.toml"])
+        self.assertEqual(result["hits"]["container"], ["Dockerfile"])
+        self.assertEqual(len(result["notes"]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

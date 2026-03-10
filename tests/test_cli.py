@@ -15,6 +15,38 @@ class TestCli(unittest.TestCase):
         with patch("sys.argv", ["depdetect", *args]):
             cli.main()
 
+    def read_json_report(self, path: Path) -> dict:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def assert_json_contract(
+        self,
+        report: dict,
+        *,
+        classification: str,
+        confidence: str,
+        files_total: int,
+        script_files: int,
+        text_files: int,
+    ) -> None:
+        self.assertEqual(
+            set(report.keys()),
+            {"root", "classification", "confidence", "counts", "hits", "notes"},
+        )
+        self.assertIsInstance(report["root"], str)
+        self.assertEqual(report["classification"], classification)
+        self.assertEqual(report["confidence"], confidence)
+        self.assertEqual(
+            report["counts"],
+            {
+                "files_total": files_total,
+                "script_files": script_files,
+                "text_files": text_files,
+            },
+        )
+        self.assertIsInstance(report["hits"], dict)
+        self.assertEqual(len(report["notes"]), 3)
+        self.assertTrue(all(isinstance(note, str) for note in report["notes"]))
+
     def test_parse_args_supports_linguist_flag(self):
         with patch("sys.argv", ["depdetect", "tests/sample/negative", "--linguist"]):
             args = cli.parse_args()
@@ -38,8 +70,16 @@ class TestCli(unittest.TestCase):
                 cli.main()
 
             self.assertTrue(json_path.exists())
-            report = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(report["classification"], "likely_scripts_only")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_scripts_only",
+                confidence="low",
+                files_total=1,
+                script_files=0,
+                text_files=1,
+            )
+            self.assertEqual(report["hits"], {})
             self.assertNotIn("languages", report)
         finally:
             json_path.unlink(missing_ok=True)
@@ -61,7 +101,7 @@ class TestCli(unittest.TestCase):
             ):
                 cli.main()
 
-            report = json.loads(json_path.read_text(encoding="utf-8"))
+            report = self.read_json_report(json_path)
             self.assertEqual(report["languages"], {"Python": 100.0})
             mock_linguist.assert_called_once_with(str(SAMPLE_ROOT / "negative"))
         finally:
@@ -87,8 +127,15 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
-            report = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(report["classification"], "likely_scripts_only")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_scripts_only",
+                confidence="low",
+                files_total=0,
+                script_files=0,
+                text_files=0,
+            )
             self.assertEqual(report["hits"], {})
         finally:
             json_path.unlink(missing_ok=True)
@@ -103,8 +150,15 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
-            report = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(report["classification"], "likely_project")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_project",
+                confidence="medium",
+                files_total=1,
+                script_files=0,
+                text_files=1,
+            )
             self.assertEqual(report["hits"]["python"], ["skipme/requirements.txt"])
         finally:
             json_path.unlink(missing_ok=True)
@@ -121,8 +175,15 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
-            report = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(report["classification"], "likely_scripts_only")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_scripts_only",
+                confidence="low",
+                files_total=0,
+                script_files=0,
+                text_files=0,
+            )
             self.assertEqual(report["hits"], {})
         finally:
             json_path.unlink(missing_ok=True)
@@ -139,10 +200,47 @@ class TestCli(unittest.TestCase):
                 str(json_path),
             )
 
-            report = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(report["classification"], "likely_project")
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_project",
+                confidence="medium",
+                files_total=1,
+                script_files=0,
+                text_files=1,
+            )
             self.assertEqual(
                 report["hits"]["python"], ["level1/level2/requirements.txt"]
+            )
+        finally:
+            json_path.unlink(missing_ok=True)
+
+    def test_main_mixed_language_report_matches_json_contract(self):
+        json_path = TEST_ROOT / "_report_mixed_language.json"
+
+        try:
+            self.run_main(
+                str(SAMPLE_ROOT / "mixed_language"),
+                "--json-out",
+                str(json_path),
+            )
+
+            report = self.read_json_report(json_path)
+            self.assert_json_contract(
+                report,
+                classification="likely_project",
+                confidence="high",
+                files_total=4,
+                script_files=1,
+                text_files=0,
+            )
+            self.assertEqual(
+                report["hits"],
+                {
+                    "container": ["Dockerfile"],
+                    "node": ["package.json"],
+                    "python": ["pyproject.toml"],
+                },
             )
         finally:
             json_path.unlink(missing_ok=True)
