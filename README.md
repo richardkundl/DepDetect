@@ -41,6 +41,25 @@ Enable language detection (requires the `github-linguist` executable in PATH):
 depdetect /path --linguist
 ```
 
+### Windows PowerShell
+Install from the repository root:
+
+```powershell
+python -m pip install -e .
+```
+
+Run with the installed console command:
+
+```powershell
+depdetect .\path\to\project --max-depth 4 --ignore-dir venv --ignore-dir build --json-out report.json
+```
+
+Or run as a module without using the console command:
+
+```powershell
+python -m depdetect .\path\to\project --max-depth 4 --ignore-dir venv --ignore-dir build --json-out report.json
+```
+
 ## Output
 The scan always prints a summary to stdout.
 
