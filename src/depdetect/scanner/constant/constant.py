@@ -55,7 +55,7 @@ MARKERS = {
     "php": {"files": {"composer.json", "composer.lock"}, "globs": set()},
     "dotnet": {
         "files": {"packages.config", "paket.lock", "global.json"},
-        "globs": {"*.csproj", "*.vbproj", "*.fsproj", "*.sln"},
+        "globs": {"*.csproj", "*.vbproj", "*.fsproj", "*.sln", "*.slnx"},
     },
     "dart": {"files": {"pubspec.yaml", "pubspec.lock"}, "globs": set()},
     "swift": {"files": {"Package.swift", "Package.resolved"}, "globs": set()},
@@ -77,7 +77,7 @@ MARKERS = {
     # Potentially scannable artifacts
     "artifacts": {
         "files": set(),
-        "globs": {"*.jar", "*.war", "*.ear", "*.dll", "*.exe", "*.whl"},
+        "globs": {"*.jar", "*.war", "*.ear", "*.dll", "*.exe", "*.whl", "*.nupkg"},
     },
 }
 
@@ -85,13 +85,30 @@ SCRIPT_EXTENSIONS = {
     ".sh",
     ".bash",
     ".zsh",
+    ".bat",
+    ".cmd",
+    ".fish",
+    ".ksh",
     ".ps1",
     ".py",
     ".rb",
     ".pl",
     ".php",
     ".js",
+    ".mjs",
+    ".cjs",
+    ".jsx",
     ".ts",
+    ".tsx",
+    ".java",
+    ".kt",
+    ".groovy",
+    ".scala",
+    ".go",
+    ".rs",
+    ".swift",
+    ".cs",
+    ".lua",
 }
 
 TEXT_EXTENSIONS = {

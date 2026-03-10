@@ -1,6 +1,11 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from depdetect.scanner import folder_scanner
+from depdetect.scanner.constant import constant
+
+
+SAMPLE_ROOT = Path(__file__).parent / "sample"
 
 
 class TestFolderScanner(unittest.TestCase):
@@ -64,6 +69,83 @@ class TestFolderScanner(unittest.TestCase):
         self.assertTrue(folder_scanner.match_any_glob("main.py", globs))
         self.assertTrue(folder_scanner.match_any_glob("docs/readme.md", globs))
         self.assertFalse(folder_scanner.match_any_glob("image.png", globs))
+
+    def test_dotnet_globs_include_slnx(self):
+        self.assertIn("*.slnx", constant.MARKERS["dotnet"]["globs"])
+
+    def test_artifacts_include_nupkg(self):
+        self.assertIn("*.nupkg", constant.MARKERS["artifacts"]["globs"])
+
+    def test_script_extensions_include_added_shell_and_language_types(self):
+        for extension in {
+            ".bat",
+            ".cmd",
+            ".fish",
+            ".ksh",
+            ".mjs",
+            ".cjs",
+            ".jsx",
+            ".tsx",
+            ".java",
+            ".kt",
+            ".groovy",
+            ".scala",
+            ".go",
+            ".rs",
+            ".swift",
+            ".cs",
+            ".lua",
+        }:
+            self.assertIn(extension, constant.SCRIPT_EXTENSIONS)
+
+    def test_scan_detects_new_dotnet_slnx_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "dotnet_slnx"), 2, [], "")
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["dotnet"], ["sample.slnx"])
+
+    def test_scan_detects_new_nupkg_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "artifact_nupkg"), 2, [], "")
+        self.assertEqual(result["classification"], "likely_project")
+        self.assertEqual(result["hits"]["artifacts"], ["sample.nupkg"])
+
+    def test_scan_counts_each_added_script_extension_fixture(self):
+        fixture_dirs = {
+            "script_bat": "sample.bat",
+            "script_cmd": "sample.cmd",
+            "script_fish": "sample.fish",
+            "script_ksh": "sample.ksh",
+            "script_mjs": "sample.mjs",
+            "script_cjs": "sample.cjs",
+            "script_jsx": "sample.jsx",
+            "script_tsx": "sample.tsx",
+            "script_java": "Sample.java",
+            "script_kt": "sample.kt",
+            "script_groovy": "sample.groovy",
+            "script_scala": "Sample.scala",
+            "script_go": "sample.go",
+            "script_rs": "sample.rs",
+            "script_swift": "sample.swift",
+            "script_cs": "Sample.cs",
+            "script_lua": "sample.lua",
+        }
+
+        for folder_name, file_name in fixture_dirs.items():
+            with self.subTest(folder=folder_name):
+                result = folder_scanner.scan(str(SAMPLE_ROOT / folder_name), 2, [], "")
+                self.assertEqual(result["classification"], "likely_scripts_only")
+                self.assertEqual(result["counts"]["files_total"], 1)
+                self.assertEqual(result["counts"]["script_files"], 1)
+                self.assertEqual(result["counts"]["text_files"], 0)
+                self.assertEqual(result["hits"], {})
+                self.assertTrue((SAMPLE_ROOT / folder_name / file_name).exists())
+
+    def test_scan_negative_fixture(self):
+        result = folder_scanner.scan(str(SAMPLE_ROOT / "negative"), 2, [], "")
+        self.assertEqual(result["classification"], "likely_scripts_only")
+        self.assertEqual(result["counts"]["files_total"], 1)
+        self.assertEqual(result["counts"]["script_files"], 0)
+        self.assertEqual(result["counts"]["text_files"], 1)
+        self.assertEqual(result["hits"], {})
 
 
 if __name__ == "__main__":
